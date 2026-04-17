@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Auto EDA — Data Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,500;0,700;1,300&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --card: #16161f;
+    --border: #252535;
+    --accent: #7c6aff;
+    --accent2: #ff6b8a;
+    --accent3: #00e5c3;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --green: #00e5a0;
+    --yellow: #ffd166;
+    --red: #ff6b6b;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* noise overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    background-size: 200px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    padding: 2rem 3rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  .logo span { color: var(--accent); }
+
+  .badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    background: var(--border);
+    color: var(--muted);
+    padding: 0.2rem 0.6rem;
+    border-radius: 100px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 3rem 2rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Upload Zone */
+  .upload-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 16px;
+    padding: 4rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    background: linear-gradient(135deg, var(--surface) 0%, var(--card) 100%);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 0%, rgba(124,106,255,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, #0f0f1a 0%, #13131e 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 20px 40px rgba(124,106,255,0.12);
+  }
+
+  .upload-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    display: block;
+    filter: grayscale(0.3);
+  }
+
+  .upload-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+
+  .upload-sub {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.4rem;
+    border-radius: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .btn-primary:hover {
+    background: #9080ff;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(124,106,255,0.3);
+  }
+
+  .btn-ghost {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  .btn-ghost:hover {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .btn-green {
+    background: var(--green);
+    color: #000;
+  }
+
+  .btn-green:hover {
+    background: #00ffb3;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(0,229,160,0.3);
+  }
+
+  #fileInput { display: none; }
+
+  /* Results */
+  #results { display: none; margin-top: 3rem; }
+
+  .section-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    margin-bottom: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .grid-4 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem 1.4rem;
+    transition: border-color 0.2s;
+  }
+
+  .stat-card:hover { border-color: var(--accent); }
+
+  .stat-label {
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.4rem;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .stat-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.7rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+
+  .stat-value.green { color: var(--green); }
+  .stat-value.yellow { color: var(--yellow); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.purple { color: var(--accent); }
+
+  .stat-sub {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 0.3rem;
+  }
+
+  /* Table */
+  .table-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: auto;
+    margin-bottom: 2rem;
+    max-height: 320px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+
+  thead {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 2;
+  }
+
+  th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(124,106,255,0.04); }
+
+  .type-pill {
+    display: inline-block;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .type-num { background: rgba(124,106,255,0.15); color: var(--accent); }
+  .type-cat { background: rgba(255,107,138,0.15); color: var(--accent2); }
+  .type-other { background: rgba(0,229,195,0.15); color: var(--accent3); }
+
+  .missing-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .missing-track {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    max-width: 80px;
+  }
+
+  .missing-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent2);
+    transition: width 0.4s ease;
+  }
+
+  /* Charts */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.2rem;
+    margin-bottom: 2rem;
+  }
+
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+    transition: border-color 0.2s;
+  }
+
+  .chart-card:hover { border-color: var(--accent); }
+
+  .chart-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 1rem;
+  }
+
+  .chart-canvas-wrap {
+    position: relative;
+    height: 200px;
+  }
+
+  /* Correlation */
+  .corr-grid {
+    display: grid;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+  }
+
+  .corr-row { display: contents; }
+
+  .corr-cell {
+    padding: 0.45rem 0.4rem;
+    text-align: center;
+    font-weight: 700;
+    transition: filter 0.15s;
+  }
+
+  .corr-cell:hover { filter: brightness(1.3); }
+
+  .corr-label {
+    padding: 0.45rem 0.7rem;
+    background: var(--surface);
+    color: var(--muted);
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100px;
+  }
+
+  /* Insights */
+  .insight-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    margin-bottom: 2rem;
+  }
+
+  .insight-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    padding: 0.9rem 1.2rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .insight-item.warn { border-left-color: var(--yellow); }
+  .insight-item.good { border-left-color: var(--green); }
+  .insight-item.alert { border-left-color: var(--red); }
+
+  .insight-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 0.1rem; }
+
+  /* Actions bar */
+  .actions-bar {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    padding: 1.4rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .actions-bar span {
+    font-size: 0.82rem;
+    color: var(--muted);
+    flex: 1;
+    min-width: 200px;
+  }
+
+  /* Loading */
+  #loading {
+    display: none;
+    text-align: center;
+    padding: 3rem;
+  }
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 1rem;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  /* Outlier table */
+  .outlier-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.3rem;
+  }
+
+  .scrollable-charts {
+    display: flex;
+    gap: 1.2rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .scrollable-charts .chart-card {
+    min-width: 280px;
+    flex-shrink: 0;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  .file-info-strip {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.8rem 1.2rem;
+    margin-bottom: 2.5rem;
+    font-size: 0.82rem;
+  }
+
+  .file-info-strip .fname {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    color: var(--accent3);
+  }
+
+  .file-info-strip .sep { color: var(--border); }
+
+  .tooltip-note {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-top: 0.4rem;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">auto<span>EDA</span></div>
+  <span class="badge">v1.0</span>
+  <span class="badge" style="margin-left:auto">CSV Analyzer</span>
+</header>
+
+<div class="main">
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <span class="upload-icon">📊</span>
+    <div class="upload-title">Drop your CSV here</div>
+    <div class="upload-sub">or click to browse — supports .csv files</div>
+    <button class="btn btn-primary" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+      ⬆ Upload Dataset
+    </button>
+    <input type="file" id="fileInput" accept=".csv" onchange="handleFile(event)"/>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Analyzing dataset...</div>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+    <div class="file-info-strip" id="fileInfoStrip"></div>
+
+    <!-- Step 1: Overview -->
+    <div class="section-title">01 — Dataset Overview</div>
+    <div class="grid-4" id="overviewCards"></div>
+
+    <!-- Step 2: Column Schema -->
+    <div class="section-title">02 — Column Schema & Missing Values</div>
+    <div class="table-wrap">
+      <table id="schemaTable">
+        <thead>
+          <tr>
+            <th>#</th><th>Column</th><th>Type</th><th>Unique</th>
+            <th>Missing</th><th>Missing %</th><th>Sample Values</th>
+          </tr>
+        </thead>
+        <tbody id="schemaBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Step 3: Statistics -->
+    <div class="section-title">03 — Numeric Statistics</div>
+    <div class="table-wrap">
+      <table id="statsTable">
+        <thead>
+          <tr><th>Column</th><th>Mean</th><th>Median</th><th>Std</th><th>Min</th><th>Max</th><th>Skew</th><th>Outliers (IQR)</th></tr>
+        </thead>
+        <tbody id="statsBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Step 4: Distributions -->
+    <div class="section-title">04 — Distributions</div>
+    <div class="scrollable-charts" id="distCharts"></div>
+
+    <!-- Step 5: Categorical -->
+    <div id="catSection">
+      <div class="section-title">05 — Categorical Breakdown</div>
+      <div class="scrollable-charts" id="catCharts"></div>
+    </div>
+
+    <!-- Step 6: Correlation -->
+    <div id="corrSection">
+      <div class="section-title">06 — Correlation Heatmap</div>
+      <div id="corrHeatmap" style="margin-bottom:2rem; overflow-x:auto;"></div>
+    </div>
+
+    <!-- Step 7: Insights -->
+    <div class="section-title">07 — Auto Insights</div>
+    <div class="insight-list" id="insightList"></div>
+
+    <!-- Step 8: Actions -->
+    <div class="section-title">08 — Export</div>
+    <div class="actions-bar">
+      <span>Dataset cleaned: duplicates removed, missing values imputed (numeric→median, categorical→mode)</span>
+      <button class="btn btn-green" id="downloadBtn">⬇ Download Cleaned CSV</button>
+      <button class="btn btn-ghost" onclick="reset()">↩ New Dataset</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let globalCleanedData = [];
+let globalHeaders = [];
+let chartInstances = [];
+
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.csv')) processFile(file);
+});
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+}
+
+function reset() {
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('loading').style.display = 'none';
+  uploadZone.style.display = 'block';
+  document.getElementById('fileInput').value = '';
+  chartInstances.forEach(c => c.destroy());
+  chartInstances = [];
+}
+
+function processFile(file) {
+  uploadZone.style.display = 'none';
+  document.getElementById('loading').style.display = 'block';
+  setTimeout(() => {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (result) => {
+        runEDA(result.data, result.meta.fields, file.name);
+      }
+    });
+  }, 300);
+}
+
+function runEDA(rawData, headers, filename) {
+  globalHeaders = headers;
+  const data = JSON.parse(JSON.stringify(rawData)); // deep copy
+
+  // --- Deduplicate ---
+  const beforeDup = data.length;
+  const seen = new Set();
+  const deduped = data.filter(row => {
+    const key = JSON.stringify(row);
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+  const dupsRemoved = beforeDup - deduped.length;
+
+  // --- Detect column types ---
+  const numCols = [], catCols = [];
+  headers.forEach(col => {
+    const vals = deduped.map(r => r[col]).filter(v => v !== '' && v != null);
+    const numVals = vals.filter(v => !isNaN(parseFloat(v)) && isFinite(v));
+    if (numVals.length / Math.max(vals.length, 1) > 0.7) numCols.push(col);
+    else catCols.push(col);
+  });
+
+  // --- Convert numerics ---
+  deduped.forEach(row => {
+    numCols.forEach(col => { row[col] = parseFloat(row[col]); });
+  });
+
+  // --- Missing value counts (before imputation) ---
+  const missingCounts = {};
+  headers.forEach(col => {
+    missingCounts[col] = deduped.filter(r => r[col] === '' || r[col] == null || (typeof r[col] === 'number' && isNaN(r[col]))).length;
+  });
+
+  // --- Impute ---
+  numCols.forEach(col => {
+    const vals = deduped.map(r => r[col]).filter(v => !isNaN(v));
+    const median = getMedian(vals);
+    deduped.forEach(r => { if (isNaN(r[col]) || r[col] == null) r[col] = median; });
+  });
+  catCols.forEach(col => {
+    const freq = {};
+    deduped.forEach(r => { if (r[col]) freq[r[col]] = (freq[r[col]] || 0) + 1; });
+    const mode = Object.entries(freq).sort((a,b)=>b[1]-a[1])[0]?.[0] || '';
+    deduped.forEach(r => { if (!r[col] || r[col] === '') r[col] = mode; });
+  });
+
+  globalCleanedData = deduped;
+
+  // --- Compute stats ---
+  const stats = {};
+  numCols.forEach(col => {
+    const vals = deduped.map(r => r[col]).filter(v => !isNaN(v));
+    stats[col] = computeStats(vals);
+  });
+
+  // --- Correlation matrix ---
+  const corrMatrix = {};
+  numCols.forEach(c1 => {
+    corrMatrix[c1] = {};
+    numCols.forEach(c2 => {
+      corrMatrix[c1][c2] = pearson(deduped.map(r=>r[c1]), deduped.map(r=>r[c2]));
+    });
+  });
+
+  // Hide loading, show results
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('results').style.display = 'block';
+
+  renderFileInfo(filename, deduped.length, headers.length, dupsRemoved, beforeDup);
+  renderOverview(deduped.length, headers.length, numCols.length, catCols.length, dupsRemoved, missingCounts);
+  renderSchema(headers, numCols, catCols, missingCounts, deduped);
+  renderStats(numCols, stats, deduped);
+  renderDistributions(numCols, deduped, stats);
+  renderCategorical(catCols, deduped);
+  renderCorrelation(numCols, corrMatrix);
+  renderInsights(deduped, numCols, catCols, stats, corrMatrix, dupsRemoved, missingCounts);
+  setupDownload(deduped, headers);
+}
+
+function renderFileInfo(name, rows, cols, dups, orig) {
+  document.getElementById('fileInfoStrip').innerHTML =
+    `<span>📁</span><span class="fname">${name}</span>
+     <span class="sep">|</span>
+     <span>${orig.toLocaleString()} rows original</span>
+     <span class="sep">|</span>
+     <span>${cols} columns</span>
+     ${dups > 0 ? `<span class="sep">|</span><span style="color:var(--yellow)">🗑 ${dups} duplicates removed</span>` : ''}
+     <span class="sep" style="margin-left:auto"></span>
+     <span style="color:var(--green)">✓ Cleaned: ${rows.toLocaleString()} rows</span>`;
+}
+
+function renderOverview(rows, cols, numCount, catCount, dups, missingCounts) {
+  const totalMissing = Object.values(missingCounts).reduce((a,b)=>a+b,0);
+  document.getElementById('overviewCards').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Rows</div>
+      <div class="stat-value purple">${rows.toLocaleString()}</div>
+      <div class="stat-sub">after dedup</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Columns</div>
+      <div class="stat-value purple">${cols}</div>
+      <div class="stat-sub">${numCount} numeric · ${catCount} categorical</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Duplicates</div>
+      <div class="stat-value ${dups > 0 ? 'yellow' : 'green'}">${dups}</div>
+      <div class="stat-sub">${dups > 0 ? 'removed' : 'none found'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Missing Cells</div>
+      <div class="stat-value ${totalMissing > 0 ? 'yellow' : 'green'}">${totalMissing}</div>
+      <div class="stat-sub">${totalMissing > 0 ? 'imputed' : 'none found'}</div>
+    </div>`;
+}
+
+function renderSchema(headers, numCols, catCols, missingCounts, data) {
+  const tbody = document.getElementById('schemaBody');
+  tbody.innerHTML = headers.map((col, i) => {
+    const isNum = numCols.includes(col);
+    const typeLabel = isNum ? 'numeric' : 'categorical';
+    const typeClass = isNum ? 'type-num' : 'type-cat';
+    const uniq = new Set(data.map(r => r[col])).size;
+    const miss = missingCounts[col] || 0;
+    const missP = ((miss / data.length) * 100).toFixed(1);
+    const samples = [...new Set(data.slice(0,50).map(r => r[col]).filter(v => v != null && v !== ''))].slice(0,3).join(', ');
+    return `<tr>
+      <td style="color:var(--muted); font-family:'Space Mono',monospace">${i+1}</td>
+      <td style="font-weight:500">${col}</td>
+      <td><span class="type-pill ${typeClass}">${typeLabel}</span></td>
+      <td style="font-family:'Space Mono',monospace">${uniq.toLocaleString()}</td>
+      <td style="font-family:'Space Mono',monospace; color:${miss>0?'var(--yellow)':'var(--green)'}">${miss}</td>
+      <td>
+        <div class="missing-bar">
+          <div class="missing-track"><div class="missing-fill" style="width:${missP}%"></div></div>
+          <span style="font-family:'Space Mono',monospace; font-size:0.7rem; color:var(--muted)">${missP}%</span>
+        </div>
+      </td>
+      <td style="color:var(--muted); max-width:200px; overflow:hidden; text-overflow:ellipsis">${samples}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderStats(numCols, stats, data) {
+  const tbody = document.getElementById('statsBody');
+  if (!numCols.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:2rem">No numeric columns found</td></tr>'; return; }
+  tbody.innerHTML = numCols.map(col => {
+    const s = stats[col];
+    const outlierPct = (s.outliers / data.length * 100).toFixed(1);
+    const skewColor = Math.abs(s.skew) > 1 ? 'var(--yellow)' : 'var(--text)';
+    return `<tr>
+      <td style="font-weight:500">${col}</td>
+      <td style="font-family:'Space Mono',monospace">${s.mean.toFixed(3)}</td>
+      <td style="font-family:'Space Mono',monospace">${s.median.toFixed(3)}</td>
+      <td style="font-family:'Space Mono',monospace">${s.std.toFixed(3)}</td>
+      <td style="font-family:'Space Mono',monospace">${s.min.toFixed(3)}</td>
+      <td style="font-family:'Space Mono',monospace">${s.max.toFixed(3)}</td>
+      <td style="font-family:'Space Mono',monospace; color:${skewColor}">${s.skew.toFixed(3)}</td>
+      <td style="font-family:'Space Mono',monospace; color:${s.outliers>0?'var(--red)':'var(--green)'}">${s.outliers} (${outlierPct}%)</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderDistributions(numCols, data, stats) {
+  const container = document.getElementById('distCharts');
+  container.innerHTML = '';
+  if (!numCols.length) { container.innerHTML = '<p style="color:var(--muted); font-size:0.85rem">No numeric columns.</p>'; return; }
+  numCols.forEach(col => {
+    const vals = data.map(r => r[col]).filter(v => !isNaN(v));
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.innerHTML = `<div class="chart-title">${col}</div><div class="chart-canvas-wrap"><canvas id="dist_${sanitize(col)}"></canvas></div>`;
+    container.appendChild(card);
+    const bins = makeBins(vals, 20);
+    const ctx = card.querySelector('canvas').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: bins.labels, datasets: [{ data: bins.counts, backgroundColor: 'rgba(124,106,255,0.6)', borderColor: 'rgba(124,106,255,1)', borderWidth: 1, borderRadius: 3 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { title: i => `Range: ${i[0].label}` } } }, scales: { x: { ticks: { color: '#6b6b80', font: { size: 9 }, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } }, y: { ticks: { color: '#6b6b80', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } } } }
+    });
+    chartInstances.push(chart);
+  });
+}
+
+function renderCategorical(catCols, data) {
+  const section = document.getElementById('catSection');
+  const container = document.getElementById('catCharts');
+  container.innerHTML = '';
+  if (!catCols.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  catCols.slice(0, 8).forEach(col => {
+    const freq = {};
+    data.forEach(r => { const v = r[col] || '(empty)'; freq[v] = (freq[v]||0)+1; });
+    const sorted = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.innerHTML = `<div class="chart-title">${col} · ${Object.keys(freq).length} unique</div><div class="chart-canvas-wrap" style="height:180px"><canvas id="cat_${sanitize(col)}"></canvas></div>`;
+    container.appendChild(card);
+    const ctx = card.querySelector('canvas').getContext('2d');
+    const colors = sorted.map((_, i) => `hsl(${230 + i*15}, 70%, ${55+i*2}%)`);
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: sorted.map(e=>e[0]), datasets: [{ data: sorted.map(e=>e[1]), backgroundColor: colors, borderRadius: 4 }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#6b6b80', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } }, y: { ticks: { color: '#e8e8f0', font: { size: 9 }, maxTicksLimit: 10 }, grid: { display: false } } } }
+    });
+    chartInstances.push(chart);
+  });
+}
+
+function renderCorrelation(numCols, corrMatrix) {
+  const section = document.getElementById('corrSection');
+  const container = document.getElementById('corrHeatmap');
+  if (numCols.length < 2) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  const limited = numCols.slice(0, 12);
+  const size = limited.length;
+  const cellW = Math.max(52, Math.floor(600 / size));
+
+  let html = `<div style="display:grid; grid-template-columns: 90px repeat(${size}, ${cellW}px); font-family:'Space Mono',monospace; font-size:0.65rem; background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden;">`;
+
+  // Header row
+  html += `<div style="background:var(--surface);"></div>`;
+  limited.forEach(col => { html += `<div style="padding:0.5rem 0.2rem; text-align:center; background:var(--surface); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom:1px solid var(--border); writing-mode:vertical-rl; transform:rotate(180deg); height:80px; font-size:0.6rem;">${col}</div>`; });
+
+  limited.forEach(r => {
+    html += `<div style="padding:0.4rem 0.6rem; background:var(--surface); color:var(--muted); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom:1px solid rgba(255,255,255,0.04); border-right:1px solid var(--border)">${r}</div>`;
+    limited.forEach(c => {
+      const v = corrMatrix[r][c];
+      const absV = Math.abs(v);
+      const bg = v === 1 ? '#7c6aff' : v > 0 ? `rgba(124,106,255,${absV*0.8})` : `rgba(255,107,138,${absV*0.8})`;
+      const textColor = absV > 0.5 ? '#fff' : '#999';
+      html += `<div style="padding:0.4rem 0.2rem; text-align:center; background:${bg}; color:${textColor}; border-bottom:1px solid rgba(255,255,255,0.04); transition:filter 0.15s;" title="${r} ↔ ${c}: ${v.toFixed(3)}">${v.toFixed(2)}</div>`;
+    });
+  });
+  html += '</div>';
+  if (numCols.length > 12) html += `<p class="tooltip-note">Showing first 12 numeric columns</p>`;
+  container.innerHTML = html;
+}
+
+function renderInsights(data, numCols, catCols, stats, corrMatrix, dupsRemoved, missingCounts) {
+  const list = document.getElementById('insightList');
+  const insights = [];
+  const n = data.length;
+
+  insights.push({ type: 'good', icon: '✅', text: `Dataset contains <strong>${n.toLocaleString()} rows</strong> and <strong>${numCols.length + catCols.length} columns</strong> (${numCols.length} numeric, ${catCols.length} categorical).` });
+
+  if (dupsRemoved > 0) insights.push({ type: 'warn', icon: '🗑', text: `<strong>${dupsRemoved} duplicate rows</strong> were removed (${(dupsRemoved/(n+dupsRemoved)*100).toFixed(1)}% of original data).` });
+  else insights.push({ type: 'good', icon: '✅', text: 'No duplicate rows found in the dataset.' });
+
+  const totalMissing = Object.values(missingCounts).reduce((a,b)=>a+b,0);
+  if (totalMissing > 0) {
+    const missCols = Object.entries(missingCounts).filter(([,v])=>v>0).map(([k,v])=>`${k} (${v})`).join(', ');
+    insights.push({ type: 'warn', icon: '⚠️', text: `<strong>${totalMissing} missing values</strong> detected and imputed: ${missCols}. Numerics filled with median, categoricals with mode.` });
+  } else {
+    insights.push({ type: 'good', icon: '✅', text: 'No missing values found. Dataset is complete.' });
+  }
+
+  // Skewed columns
+  const skewed = numCols.filter(c => Math.abs(stats[c].skew) > 1);
+  if (skewed.length) insights.push({ type: 'warn', icon: '📐', text: `<strong>Skewed distributions</strong> detected in: ${skewed.join(', ')}. Consider log-transformation before modeling.` });
+
+  // High outlier columns
+  const highOutliers = numCols.filter(c => stats[c].outliers / n > 0.05);
+  if (highOutliers.length) insights.push({ type: 'alert', icon: '🚨', text: `<strong>High outlier rate (&gt;5%)</strong> in: ${highOutliers.join(', ')}. Review before training models.` });
+
+  // Strong correlations
+  let topCorr = null, topVal = 0;
+  numCols.forEach(c1 => numCols.forEach(c2 => {
+    if (c1 !== c2) {
+      const v = Math.abs(corrMatrix[c1]?.[c2] || 0);
+      if (v > topVal) { topVal = v; topCorr = [c1, c2]; }
+    }
+  }));
+  if (topCorr && topVal > 0.7) insights.push({ type: 'warn', icon: '🔗', text: `<strong>Strong correlation (r = ${topVal.toFixed(3)})</strong> between <em>${topCorr[0]}</em> and <em>${topCorr[1]}</em>. May indicate multicollinearity.` });
+  else if (topCorr && topVal > 0.4) insights.push({ type: '', icon: '🔗', text: `Moderate correlation (r = ${topVal.toFixed(3)}) between <em>${topCorr[0]}</em> and <em>${topCorr[1]}</em>.` });
+
+  // High cardinality
+  const highCard = catCols.filter(c => new Set(data.map(r=>r[c])).size > 50);
+  if (highCard.length) insights.push({ type: 'warn', icon: '🏷️', text: `<strong>High cardinality</strong> in: ${highCard.join(', ')}. Consider encoding or grouping rare categories.` });
+
+  insights.push({ type: 'good', icon: '🎯', text: 'EDA complete. Cleaned dataset is ready to download and use for modeling.' });
+
+  list.innerHTML = insights.map(ins => `
+    <div class="insight-item ${ins.type}">
+      <span class="insight-icon">${ins.icon}</span>
+      <span>${ins.text}</span>
+    </div>`).join('');
+}
+
+function setupDownload(data, headers) {
+  document.getElementById('downloadBtn').onclick = () => {
+    const csv = Papa.unparse(data, { columns: headers });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'cleaned_dataset.csv';
+    a.click();
+  };
+}
+
+// --- Utilities ---
+function sanitize(str) { return str.replace(/[^a-zA-Z0-9]/g, '_'); }
+
+function getMedian(arr) {
+  const s = [...arr].sort((a,b)=>a-b);
+  const m = Math.floor(s.length/2);
+  return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
+}
+
+function computeStats(vals) {
+  if (!vals.length) return { mean:0, median:0, std:0, min:0, max:0, skew:0, outliers:0 };
+  const n = vals.length;
+  const mean = vals.reduce((a,b)=>a+b,0)/n;
+  const median = getMedian(vals);
+  const variance = vals.reduce((a,b)=>a+(b-mean)**2,0)/n;
+  const std = Math.sqrt(variance);
+  const skew = std === 0 ? 0 : vals.reduce((a,b)=>a+((b-mean)/std)**3,0)/n;
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const sorted = [...vals].sort((a,b)=>a-b);
+  const Q1 = sorted[Math.floor(n*0.25)], Q3 = sorted[Math.floor(n*0.75)];
+  const IQR = Q3 - Q1;
+  const outliers = vals.filter(v => v < Q1-1.5*IQR || v > Q3+1.5*IQR).length;
+  return { mean, median, std, min, max, skew, outliers };
+}
+
+function makeBins(vals, numBins) {
+  const min = Math.min(...vals), max = Math.max(...vals);
+  if (min === max) return { labels: [min.toString()], counts: [vals.length] };
+  const width = (max - min) / numBins;
+  const counts = new Array(numBins).fill(0);
+  vals.forEach(v => {
+    let b = Math.floor((v - min) / width);
+    if (b >= numBins) b = numBins - 1;
+    counts[b]++;
+  });
+  const labels = counts.map((_, i) => (min + i * width).toFixed(2));
+  return { labels, counts };
+}
+
+function pearson(xs, ys) {
+  const n = xs.length;
+  if (n < 2) return 0;
+  const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+  let num = 0, dx = 0, dy = 0;
+  for (let i=0;i<n;i++) { num+=(xs[i]-mx)*(ys[i]-my); dx+=(xs[i]-mx)**2; dy+=(ys[i]-my)**2; }
+  return (dx && dy) ? +(num/Math.sqrt(dx*dy)).toFixed(4) : 0;
+}
+</script>
+</body>
+</html>
